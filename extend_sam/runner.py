@@ -6,7 +6,7 @@ import cv2
 import torch.nn.functional as F
 import os
 import torch.nn as nn
-
+import matplotlib.pyplot as plt
 
 class BaseRunner():
     def __init__(self, model, optimizer, losses, train_loader, val_loader, scheduler):
@@ -52,7 +52,9 @@ class SemRunner(BaseRunner):
             writer = SummaryWriter(tensorboard_dir)
         # train
         for iteration in range(cfg.max_iter):
-            images, labels = train_iterator.get()
+            thing = train_iterator.get()
+
+            images,labels = thing['pixel_values'], thing['ground_truth_mask']
             images, labels = images.cuda(), labels.cuda().long()
             masks_pred, iou_pred = self.model(images)
             masks_pred = F.interpolate(masks_pred, self.original_size, mode="bilinear", align_corners=False)
@@ -93,10 +95,11 @@ class SemRunner(BaseRunner):
     def _eval(self):
         self.model.eval()
         self.eval_timer.start()
-        class_names = self.val_loader.dataset.class_names
+        class_names = ["bckgnd", "NCR", "ED", "ET"]
         eval_metric = mIoUOnline(class_names=class_names)
         with torch.no_grad():
-            for index, (images, labels) in enumerate(self.val_loader):
+            for index, thing in enumerate(self.val_loader):
+                images, labels = thing['pixel_values'], thing['ground_truth_mask']
                 images = images.cuda()
                 labels = labels.cuda()
                 masks_pred, iou_pred = self.model(images)
@@ -104,7 +107,13 @@ class SemRunner(BaseRunner):
                 for batch_index in range(images.size()[0]):
                     pred_mask = get_numpy_from_tensor(predictions[batch_index])
                     gt_mask = get_numpy_from_tensor(labels[batch_index].squeeze(0))
-                    h, w = pred_mask.shape
+                    
+                    print("predshape",pred_mask.shape)
+                    print("gtshape", gt_mask.shape)
+
+                    plt.imshow(pred_mask, cmap='gray')
+                    # plt.show()
+                    plt.savefig("predicted_mask.png")
                     gt_mask = cv2.resize(gt_mask, (w, h), interpolation=cv2.INTER_NEAREST)
 
                     eval_metric.add(pred_mask, gt_mask)
@@ -120,9 +129,13 @@ class SemRunner(BaseRunner):
         for index, item in enumerate(self.losses.items()):
             # item -> (key: loss_name, val: loss)
             real_labels = labels
-            if loss_cfg[item[0]].label_one_hot:
-                class_num = cfg.model.params.class_num
-                real_labels = one_hot_embedding_3d(real_labels, class_num=class_num)
-            tmp_loss = item[1](mask_pred, real_labels)
+            # if loss_cfg[item[0]].label_one_hot:
+            #     class_num = cfg.model.params.class_num
+            #     real_labels = one_hot_embedding_3d(real_labels, class_num=class_num)
+            
+            # print(mask_pred.shape, labels.shape)
+            # print(loss_dict, item[0])
+            tmp_loss = item[1](sigmoid=True, squared_pred=True, reduction='mean')(mask_pred, real_labels)
+            # print(tmp_loss.item())
             loss_dict[item[0]] = tmp_loss.item()
             total_loss += loss_cfg[item[0]].weight * tmp_loss

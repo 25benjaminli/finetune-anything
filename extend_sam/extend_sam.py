@@ -29,7 +29,7 @@ class BaseExtendSam(nn.Module):
             boxes=boxes,
             masks=masks,
         )
-        multimask_output = True
+        multimask_output = False
         low_res_masks, iou_predictions = self.mask_adapter(
             image_embeddings=x,
             prompt_adapter=self.prompt_adapter,

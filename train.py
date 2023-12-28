@@ -9,6 +9,26 @@ from losses import get_losses
 from extend_sam import get_model, get_optimizer, get_scheduler, get_opt_pamams, get_runner
 
 import dill
+import os
+import glob
+import monai
+import torch
+import numpy as np
+from PIL import Image
+from tqdm import tqdm
+import SimpleITK as sitk
+from statistics import mean
+from torch.optim import Adam
+import matplotlib.pyplot as plt
+from transformers import SamModel
+import matplotlib.patches as patches
+from transformers import SamProcessor
+from IPython.display import clear_output
+from torch.utils.data import Dataset, DataLoader
+from torch.nn.functional import threshold, normalize
+import cv2
+import dill
+
 from monai.transforms import (
     EnsureChannelFirstd,
     EnsureTyped,
@@ -34,12 +54,11 @@ from monai.transforms import (
     RandFlipd,
     RandScaleIntensityd,
     RandShiftIntensityd,
+    Resized,
     Resize
 )
-from torch.utils.data import Dataset, DataLoader
-import numpy as np
-from PIL import Image
-import torch
+import torchvision
+
 
 def get_bounding_box(ground_truth_map):
     '''
@@ -87,8 +106,8 @@ if __name__ == '__main__':
     train_cfg = config.train
     # val_cfg = config.val
     # test_cfg = config.test
-    train_f = open("train_dataloader.pkl",'rb')
-    val_f = open("val_dataloader.pkl",'rb')
+    train_f = open("train_dataloader_newtest.pkl",'rb')
+    val_f = open("val_dataloader_newtest.pkl",'rb')
 
 
     train_loader = dill.load(train_f)
