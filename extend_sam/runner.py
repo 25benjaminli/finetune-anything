@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import os
 import torch.nn as nn
 import matplotlib.pyplot as plt
+import numpy as np
 
 class BaseRunner():
     def __init__(self, model, optimizer, losses, train_loader, val_loader, scheduler):
@@ -56,8 +57,15 @@ class SemRunner(BaseRunner):
 
             images,labels = thing['pixel_values'], thing['ground_truth_mask']
             images, labels = images.cuda(), labels.cuda().long()
+            # print("imagesshape",images.shape)
+            # print("gtshape", labels.shape)
+
             masks_pred, iou_pred = self.model(images)
+            # print("masks_pred_orig", masks_pred.shape)
+
             masks_pred = F.interpolate(masks_pred, self.original_size, mode="bilinear", align_corners=False)
+
+            # print("masks_pred_after", masks_pred.shape)
 
             total_loss = torch.zeros(1).cuda()
             loss_dict = {}
@@ -103,21 +111,29 @@ class SemRunner(BaseRunner):
                 images = images.cuda()
                 labels = labels.cuda()
                 masks_pred, iou_pred = self.model(images)
+                masks_pred = F.interpolate(masks_pred, self.original_size, mode="bilinear", align_corners=False)
+                # alternatively reverse the thing I did earlier
                 predictions = torch.argmax(masks_pred, dim=1)
+                
                 for batch_index in range(images.size()[0]):
                     pred_mask = get_numpy_from_tensor(predictions[batch_index])
                     gt_mask = get_numpy_from_tensor(labels[batch_index].squeeze(0))
                     
+                    h, w = pred_mask.shape
+                    
                     print("predshape",pred_mask.shape)
+                    print("predshape unique", np.unique(pred_mask))
                     print("gtshape", gt_mask.shape)
+                    print("gt unique", np.unique(gt_mask))
+
 
                     plt.imshow(pred_mask, cmap='gray')
                     # plt.show()
                     plt.savefig("predicted_mask.png")
-                    gt_mask = cv2.resize(gt_mask, (w, h), interpolation=cv2.INTER_NEAREST)
+                    # gt_mask = cv2.resize(gt_mask, (w, h), interpolation=cv2.INTER_NEAREST)
 
-                    eval_metric.add(pred_mask, gt_mask)
-        self.model.train()
+                    # eval_metric.add(pred_mask, gt_mask)
+        # self.model.train()
         return eval_metric.get(clear=True)
 
     def _compute_loss(self, total_loss, loss_dict, mask_pred, labels, cfg):
