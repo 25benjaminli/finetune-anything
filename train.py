@@ -113,7 +113,10 @@ if __name__ == '__main__':
     train_loader = dill.load(train_f)
     val_loader = dill.load(val_f)
     
-    losses = {"DiceCE": monai.losses.DiceCELoss}
+    losses = get_losses(losses=train_cfg.losses)
+
+    print("losses are: ", losses)
+
     # according the model name to get the adapted model
     
     model = get_model(model_name=train_cfg.model.sam_name, **train_cfg.model.params)

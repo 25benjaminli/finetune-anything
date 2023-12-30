@@ -8,6 +8,8 @@ import os
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import numpy as np
+from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 class BaseRunner():
     def __init__(self, model, optimizer, losses, train_loader, val_loader, scheduler):
@@ -54,19 +56,17 @@ class SemRunner(BaseRunner):
         # train
         for iteration in range(cfg.max_iter):
             thing = train_iterator.get()
-
             images,labels = thing['pixel_values'], thing['ground_truth_mask']
             images, labels = images.cuda(), labels.cuda().long()
-            # print("imagesshape",images.shape)
-            # print("gtshape", labels.shape)
-
+            
             masks_pred, iou_pred = self.model(images)
-            # print("masks_pred_orig", masks_pred.shape)
 
+            # print("shapes of image  label mask during training", images.shape, labels.shape, masks_pred.shape)
+
+            
             masks_pred = F.interpolate(masks_pred, self.original_size, mode="bilinear", align_corners=False)
-
-            # print("masks_pred_after", masks_pred.shape)
-
+            # print("mask shape after interpolation: ", masks_pred.shape)
+            
             total_loss = torch.zeros(1).cuda()
             loss_dict = {}
             self._compute_loss(total_loss, loss_dict, masks_pred, labels, cfg)
@@ -82,6 +82,40 @@ class SemRunner(BaseRunner):
                 write_log(iteration=iteration, log_path=log_path, log_data=train_meter.get(clear=True),
                           status=self.exist_status[0],
                           writer=writer, timer=self.train_timer)
+            # visualize
+            if (iteration + 1) % 40 == 0:
+                # matplotlib
+                fig, ax = plt.subplots(1, 5, figsize=(10, 5))
+                
+                np.save('img_1.npy',get_numpy_from_tensor(images[0][0]))
+                np.save('label_real.npy',get_numpy_from_tensor(labels[0]))
+
+                np.save('label_1.npy',get_numpy_from_tensor(masks_pred[0][0]))
+                np.save('label_2.npy',get_numpy_from_tensor(masks_pred[0][1]))
+                np.save('label_3.npy',get_numpy_from_tensor(masks_pred[0][2]))
+
+                np.save('label_4.npy',get_numpy_from_tensor(masks_pred[0][3]))
+
+
+
+                
+
+                # ax[0].imshow(get_numpy_from_tensor(images[0][0]), cmap='gray')
+                # ax[1].imshow(get_numpy_from_tensor(masks_pred[0][0]), cmap='gray')
+                # ax[2].imshow(get_numpy_from_tensor(masks_pred[0][1]), cmap='gray')
+                # ax[3].imshow(get_numpy_from_tensor(masks_pred[0][2]), cmap='gray')
+                # ax[4].imshow(get_numpy_from_tensor(masks_pred[0][3]), cmap='gray')
+
+                # # plt.show()
+
+                # plt.savefig('foo.png')
+
+
+
+
+
+
+
             # eval
             if (iteration + 1) % cfg.eval_iter == 0:
                 mIoU, _ = self._eval()
@@ -105,15 +139,20 @@ class SemRunner(BaseRunner):
         self.eval_timer.start()
         class_names = ["bckgnd", "NCR", "ED", "ET"]
         eval_metric = mIoUOnline(class_names=class_names)
+        print("evaluating metrics for validation")
         with torch.no_grad():
-            for index, thing in enumerate(self.val_loader):
+            for index, thing in enumerate(tqdm(self.val_loader)):
                 images, labels = thing['pixel_values'], thing['ground_truth_mask']
                 images = images.cuda()
                 labels = labels.cuda()
                 masks_pred, iou_pred = self.model(images)
-                masks_pred = F.interpolate(masks_pred, self.original_size, mode="bilinear", align_corners=False)
+                # masks_pred = F.interpolate(masks_pred, self.original_size, mode="bilinear", align_corners=False)
                 # alternatively reverse the thing I did earlier
-                predictions = torch.argmax(masks_pred, dim=1)
+                # print("image, label, and mask dimensions:", images.shape, labels.shape, masks_pred.shape)
+
+                
+                predictions = torch.argmax(masks_pred, dim=2)
+
                 
                 for batch_index in range(images.size()[0]):
                     pred_mask = get_numpy_from_tensor(predictions[batch_index])
@@ -121,19 +160,17 @@ class SemRunner(BaseRunner):
                     
                     h, w = pred_mask.shape
                     
-                    print("predshape",pred_mask.shape)
-                    print("predshape unique", np.unique(pred_mask))
-                    print("gtshape", gt_mask.shape)
-                    print("gt unique", np.unique(gt_mask))
+                    # print("batch mask, batch ground truth", pred_mask.shape, gt_mask.shape)
 
+                    # plt.imshow(pred_mask, cmap='gray')
+                    # # plt.show()
+                    # plt.savefig("predicted_mask.png")
+                    gt_mask = cv2.resize(gt_mask, (w, h), interpolation=cv2.INTER_NEAREST)
+                    
+                    # print("gt_mask interpolated", gt_mask.shape)
 
-                    plt.imshow(pred_mask, cmap='gray')
-                    # plt.show()
-                    plt.savefig("predicted_mask.png")
-                    # gt_mask = cv2.resize(gt_mask, (w, h), interpolation=cv2.INTER_NEAREST)
-
-                    # eval_metric.add(pred_mask, gt_mask)
-        # self.model.train()
+                    eval_metric.add(pred_mask, gt_mask)
+        self.model.train()
         return eval_metric.get(clear=True)
 
     def _compute_loss(self, total_loss, loss_dict, mask_pred, labels, cfg):
@@ -145,13 +182,18 @@ class SemRunner(BaseRunner):
         for index, item in enumerate(self.losses.items()):
             # item -> (key: loss_name, val: loss)
             real_labels = labels
+            # print("label shape, pred shape when computing loss", labels.shape, mask_pred.shape)
+
             # if loss_cfg[item[0]].label_one_hot:
-            #     class_num = cfg.model.params.class_num
+            #     class_num = 4
             #     real_labels = one_hot_embedding_3d(real_labels, class_num=class_num)
             
             # print(mask_pred.shape, labels.shape)
             # print(loss_dict, item[0])
-            tmp_loss = item[1](sigmoid=True, squared_pred=True, reduction='mean')(mask_pred, real_labels)
-            # print(tmp_loss.item())
+            
+            # use different loss here
+            # print("uniques: ", torch.unique(labels), torch.unique(mask_pred))
+            # print(item[1])
+            tmp_loss = item[1](mask_pred, real_labels)
             loss_dict[item[0]] = tmp_loss.item()
             total_loss += loss_cfg[item[0]].weight * tmp_loss
