@@ -185,7 +185,8 @@ def save_model(model, model_path, parallel=False, is_final=False):
     if parallel:
         torch.save(model.module.state_dict(), model_path)
     else:
-        torch.save(model.state_dict(), model_path)
+        # torch.save(model.state_dict(), model_path)
+        torch.save(model, model_path)
 
 
 def write_log(iteration, log_path, log_data, status, writer, timer):

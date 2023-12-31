@@ -90,7 +90,7 @@ def get_bounding_box(ground_truth_map):
 supported_tasks = ['detection', 'semantic_seg', 'instance_seg']
 parser = argparse.ArgumentParser()
 parser.add_argument('--task_name', default='semantic_seg', type=str)
-parser.add_argument('--cfg', default=None, type=str)
+parser.add_argument('--cfg', default='./finetune-anything/config/modelconfig.yaml', type=str)
 
 import monai
 
@@ -104,6 +104,8 @@ if __name__ == '__main__':
         config = OmegaConf.load("./config/{task_name}.yaml".format(task_name=args.task_name))
 
     train_cfg = config.train
+
+    print("train cfg", train_cfg)
     # val_cfg = config.val
     # test_cfg = config.test
     train_f = open("train_dataloader_newtest.pkl",'rb')
@@ -112,9 +114,14 @@ if __name__ == '__main__':
 
     train_loader = dill.load(train_f)
     val_loader = dill.load(val_f)
+
+    print(args.cfg, train_cfg.losses)
+    print(train_cfg.losses['DiceCE'])
+    
     
     losses = get_losses(losses=train_cfg.losses)
 
+    
     print("losses are: ", losses)
 
     # according the model name to get the adapted model

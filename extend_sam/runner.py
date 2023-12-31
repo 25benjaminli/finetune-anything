@@ -61,8 +61,9 @@ class SemRunner(BaseRunner):
             
             masks_pred, iou_pred = self.model(images)
 
+            
             # print("shapes of image  label mask during training", images.shape, labels.shape, masks_pred.shape)
-
+            predictions_argmax = torch.argmax(masks_pred, dim=1)
             
             masks_pred = F.interpolate(masks_pred, self.original_size, mode="bilinear", align_corners=False)
             # print("mask shape after interpolation: ", masks_pred.shape)
@@ -83,32 +84,29 @@ class SemRunner(BaseRunner):
                           status=self.exist_status[0],
                           writer=writer, timer=self.train_timer)
             # visualize
-            if (iteration + 1) % 40 == 0:
+            if (iteration + 1) % 500 == 0:
                 # matplotlib
-                fig, ax = plt.subplots(1, 5, figsize=(10, 5))
+                print("plotting")
+                fig, ax = plt.subplots(1, 3, figsize=(10, 5))
                 
-                np.save('img_1.npy',get_numpy_from_tensor(images[0][0]))
-                np.save('label_real.npy',get_numpy_from_tensor(labels[0]))
+                pred_mask = predictions_argmax[0]
+                gt_mask = labels[0].squeeze(0).cpu().numpy()
+                h, w = pred_mask.shape
+                print("h, w", h, w)
+                print("gtmaskshape", gt_mask.shape)
+                gt_mask = cv2.resize(gt_mask, (w, h), interpolation=cv2.INTER_NEAREST)
 
-                np.save('label_1.npy',get_numpy_from_tensor(masks_pred[0][0]))
-                np.save('label_2.npy',get_numpy_from_tensor(masks_pred[0][1]))
-                np.save('label_3.npy',get_numpy_from_tensor(masks_pred[0][2]))
+                print(images.shape, masks_pred.shape, gt_mask.shape, pred_mask.shape)
 
-                np.save('label_4.npy',get_numpy_from_tensor(masks_pred[0][3]))
-
-
-
+                ax[0].imshow(get_numpy_from_tensor(images[0][0]), cmap='gray')
+                ax[1].imshow(get_numpy_from_tensor(pred_mask))
+                ax[2].imshow(gt_mask)
+                # ax[2].imshow(masks_pred[1])
+                # ax[3].imshow(masks_pred[2])
+                # ax[4].imshow(masks_pred[3])
                 
 
-                # ax[0].imshow(get_numpy_from_tensor(images[0][0]), cmap='gray')
-                # ax[1].imshow(get_numpy_from_tensor(masks_pred[0][0]), cmap='gray')
-                # ax[2].imshow(get_numpy_from_tensor(masks_pred[0][1]), cmap='gray')
-                # ax[3].imshow(get_numpy_from_tensor(masks_pred[0][2]), cmap='gray')
-                # ax[4].imshow(get_numpy_from_tensor(masks_pred[0][3]), cmap='gray')
-
-                # # plt.show()
-
-                # plt.savefig('foo.png')
+                plt.show()
 
 
 
@@ -151,9 +149,31 @@ class SemRunner(BaseRunner):
                 # print("image, label, and mask dimensions:", images.shape, labels.shape, masks_pred.shape)
 
                 
-                predictions = torch.argmax(masks_pred, dim=2)
+                predictions = torch.argmax(masks_pred, dim=1) # keep at 1 dimension!!
 
-                
+                if (index + 1) % 500 == 0:
+                    # matplotlib
+                    print("plotting")
+                    fig, ax = plt.subplots(1, 3, figsize=(10, 5))
+                    
+                    pred_mask = predictions[0]
+                    gt_mask = labels[0].squeeze(0).cpu().numpy()
+                    h, w = pred_mask.shape
+                    print("h, w", h, w)
+                    print("gtmaskshape", gt_mask.shape)
+                    gt_mask = cv2.resize(gt_mask, (w, h), interpolation=cv2.INTER_NEAREST)
+
+                    print(images.shape, masks_pred.shape, gt_mask.shape, pred_mask.shape)
+
+                    ax[0].imshow(get_numpy_from_tensor(images[0][0]), cmap='gray')
+                    ax[1].imshow(get_numpy_from_tensor(pred_mask))
+                    ax[2].imshow(gt_mask)
+                    # ax[2].imshow(masks_pred[1])
+                    # ax[3].imshow(masks_pred[2])
+                    # ax[4].imshow(masks_pred[3])
+                    
+
+                    plt.show()
                 for batch_index in range(images.size()[0]):
                     pred_mask = get_numpy_from_tensor(predictions[batch_index])
                     gt_mask = get_numpy_from_tensor(labels[batch_index].squeeze(0))
@@ -193,7 +213,8 @@ class SemRunner(BaseRunner):
             
             # use different loss here
             # print("uniques: ", torch.unique(labels), torch.unique(mask_pred))
-            # print(item[1])
+            # print(item[0])
+            
             tmp_loss = item[1](mask_pred, real_labels)
             loss_dict[item[0]] = tmp_loss.item()
             total_loss += loss_cfg[item[0]].weight * tmp_loss
